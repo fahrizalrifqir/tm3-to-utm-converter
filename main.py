@@ -7,7 +7,7 @@ from streamlit_folium import st_folium
 from utils.shp_reader import read_shp
 from utils.dwg_reader import read_dwg
 from utils.pdf_reader import read_pdf
-from utils.projection import reproject_to_utm
+from utils.projection import reproject_to_utm, _tm3_zone_to_utm_epsg
 from utils.exporter import export_shp, export_csv
 
 # ── page config ──────────────────────────────────────────────────────────────
@@ -124,7 +124,10 @@ if "gdf_utm" in st.session_state:
 
         total_ha = df_display.get("Luas_Ha", pd.Series([0])).sum()
         if total_ha:
+            utm_epsg = _tm3_zone_to_utm_epsg(tm3_zone)
+            utm_zone_number = utm_epsg - 32700
             st.metric("Total Luas", f"{total_ha:,.4f} Ha")
+            st.caption(f"Total Luas Proyeksi UTM WGS84 Zone {utm_zone_number}S (EPSG:{utm_epsg})")
 
     with col2:
         st.markdown("**Preview Peta (WGS84)**")
