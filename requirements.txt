@@ -1,0 +1,10 @@
+geopandas
+pandas
+numpy
+pyproj
+shapely
+pdfplumber
+tabula-py
+fiona
+pyogrio
+ezdxf
