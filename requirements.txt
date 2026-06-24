@@ -5,6 +5,5 @@ pyproj
 shapely
 pdfplumber
 tabula-py
-fiona
 pyogrio
 ezdxf
