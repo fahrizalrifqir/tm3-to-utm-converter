@@ -7,3 +7,5 @@ shapely
 pyogrio
 pdfplumber
 ezdxf
+folium
+streamlit-folium
