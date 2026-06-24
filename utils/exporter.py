@@ -61,7 +61,8 @@ def export_csv(gdf: gpd.GeoDataFrame) -> bytes:
             continue
 
         coords = _extract_coords(geom)
-        for i, (x, y) in enumerate(coords, start=1):
+        for i, coord in enumerate(coords, start=1):
+            x, y = coord[0], coord[1]  # abaikan Z jika ada (shapefile 3D)
             entry = {"FID": idx, "No_Titik": i, "X_TM3": round(x, 3), "Y_TM3": round(y, 3)}
             entry.update(attrs)
             rows.append(entry)
