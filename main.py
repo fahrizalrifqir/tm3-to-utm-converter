@@ -41,56 +41,56 @@ with st.sidebar:
     )
     st.markdown("---")
     st.markdown("**Format input yang didukung:**")
-    st.markdown("- `.shp` — Shapefile\n- `.dwg` — AutoCAD DXF/DWG\n- `.pdf` — Tabel koordinat\n- `.csv` — Koordinat teks")
+    st.markdown(
+        "- `.zip` — **ZIP Shapefile** (berisi .shp, .dbf, .shx, .prj)\n"
+        "- `.dxf` — AutoCAD DXF\n"
+        "- `.pdf` — PDF tabel koordinat\n"
+        "- `.csv` — Koordinat teks"
+    )
 
 # ── file uploader ─────────────────────────────────────────────────────────────
 st.subheader("1. Upload File")
 uploaded = st.file_uploader(
     "Pilih file koordinat / peta",
-    type=["shp", "dbf", "shx", "prj", "dwg", "dxf", "pdf", "csv"],
-    accept_multiple_files=True,
-    help="Untuk Shapefile, upload semua komponen (.shp, .dbf, .shx, .prj) sekaligus.",
+    type=["zip", "dxf", "dwg", "pdf", "csv"],
+    accept_multiple_files=False,
+    help=(
+        "Shapefile: ZIP berisi .shp + .dbf + .shx (+ .prj). "
+        "DXF/DWG: export dari AutoCAD ke .dxf terlebih dahulu."
+    ),
 )
 
 # ── process ───────────────────────────────────────────────────────────────────
 gdf = None
 
 if uploaded:
-    # Tulis semua file ke tempdir agar library bisa membacanya dari disk
-    with tempfile.TemporaryDirectory() as tmpdir:
-        saved = {}
-        for f in uploaded:
-            path = os.path.join(tmpdir, f.name)
-            with open(path, "wb") as fp:
-                fp.write(f.read())
-            saved[f.name.lower()] = path
+    ext = os.path.splitext(uploaded.name)[1].lower()
 
-        # Deteksi jenis file utama
-        exts = [os.path.splitext(n)[1].lower() for n in saved]
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = os.path.join(tmpdir, uploaded.name)
+        with open(tmp_path, "wb") as fp:
+            fp.write(uploaded.read())
 
         try:
-            if ".shp" in exts:
-                shp_path = [v for k, v in saved.items() if k.endswith(".shp")][0]
-                gdf = read_shp(shp_path)
-                src_format = "Shapefile"
+            if ext == ".zip":
+                # ZIP Shapefile
+                gdf = read_shp(tmp_path)
+                src_format = "ZIP Shapefile"
 
-            elif ".dxf" in exts or ".dwg" in exts:
-                dwg_path = [v for k, v in saved.items() if k.endswith((".dwg", ".dxf"))][0]
-                gdf = read_dwg(dwg_path)
+            elif ext in (".dxf", ".dwg"):
+                gdf = read_dwg(tmp_path)
                 src_format = "DWG/DXF"
 
-            elif ".pdf" in exts:
-                pdf_path = [v for k, v in saved.items() if k.endswith(".pdf")][0]
-                gdf = read_pdf(pdf_path)
+            elif ext == ".pdf":
+                gdf = read_pdf(tmp_path)
                 src_format = "PDF (tabel koordinat)"
 
-            elif ".csv" in exts:
-                csv_path = [v for k, v in saved.items() if k.endswith(".csv")][0]
-                gdf = read_shp(csv_path, is_csv=True)   # delegasi ke shp_reader
+            elif ext == ".csv":
+                gdf = read_shp(tmp_path, is_csv=True)
                 src_format = "CSV"
 
             else:
-                st.warning("Format file tidak dikenali. Mohon upload SHP, DXF/DWG, PDF, atau CSV.")
+                st.warning("Format file tidak dikenali. Mohon upload ZIP, DXF, PDF, atau CSV.")
 
         except Exception as e:
             st.error(f"❌ Gagal membaca file: {e}")
@@ -126,7 +126,6 @@ if "gdf_tm3" in st.session_state:
     with col1:
         st.markdown("**Tabel Atribut & Luas**")
 
-        # Hitung luas hanya untuk polygon
         df_display = gdf_tm3.drop(columns="geometry", errors="ignore").copy()
         if gdf_tm3.geom_type.isin(["Polygon", "MultiPolygon"]).any():
             df_display["Luas_m2"] = gdf_tm3.geometry.area.round(2)
