@@ -6,8 +6,8 @@ st.title("TM3 Universal Converter")
 st.info("Starter project generated. Implement parsers in utils/*.py")
 
 uploaded = st.file_uploader(
-    "Upload SHP / DWG / PDF / CSV",
-    type=["shp", "dwg", "pdf", "csv"],
+    "Upload Data",
+    type=["zip", "shp", "dwg", "pdf", "csv"]
 )
 
 tm3_zone = st.selectbox(
