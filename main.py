@@ -1,31 +1,31 @@
 import streamlit as st
 import geopandas as gpd
 import pandas as pd
-import tempfile, os, zipfile, io
+import tempfile, os
 from streamlit_folium import st_folium
 
 from utils.shp_reader import read_shp
 from utils.dwg_reader import read_dwg
 from utils.pdf_reader import read_pdf
-from utils.projection import reproject_to_tm3
+from utils.projection import reproject_to_utm
 from utils.exporter import export_shp, export_csv
 
 # ── page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="TM3 Universal Converter",
+    page_title="TM3 → UTM Converter",
     page_icon="🗺️",
     layout="wide",
 )
 
 # ── header ───────────────────────────────────────────────────────────────────
-st.title("🗺️ TM3 Universal Converter")
+st.title("🗺️ TM3 → UTM Converter")
 st.caption(
-    "Konversi file SHP / DWG / PDF / CSV koordinat ke sistem proyeksi **TM3 Indonesia**, "
+    "Konversi file koordinat sistem **TM3 BPN Indonesia** ke **UTM WGS84**, "
     "hitung luas (Ha), dan ekspor hasil."
 )
 st.divider()
 
-# ── sidebar – zona TM3 ───────────────────────────────────────────────────────
+# ── sidebar ───────────────────────────────────────────────────────────────────
 ZONA_LIST = [
     "46.2","47.1","47.2","48.1","48.2",
     "49.1","49.2","50.1","50.2","51.1",
@@ -34,33 +34,30 @@ ZONA_LIST = [
 
 with st.sidebar:
     st.header("⚙️ Pengaturan")
-    tm3_zone = st.selectbox("Zona TM3", ZONA_LIST, index=6)
+    tm3_zone = st.selectbox("Zona TM3 Sumber", ZONA_LIST, index=6)
     st.info(
-        "TM3 (Transverse Mercator 3°) adalah sistem proyeksi resmi BPN Indonesia "
-        "dengan lebar zona 3°."
+        "Pilih zona TM3 sesuai lokasi bidang tanah. "
+        "Sistem akan otomatis menentukan zona UTM tujuan."
     )
     st.markdown("---")
     st.markdown("**Format input yang didukung:**")
     st.markdown(
-        "- `.zip` — **ZIP Shapefile** (berisi .shp, .dbf, .shx, .prj)\n"
+        "- `.zip` — ZIP Shapefile TM3 (.shp, .dbf, .shx, .prj)\n"
         "- `.dxf` — AutoCAD DXF\n"
-        "- `.pdf` — PDF tabel koordinat\n"
-        "- `.csv` — Koordinat teks"
+        "- `.pdf` — PDF tabel koordinat TM3\n"
+        "- `.csv` — Koordinat TM3"
     )
 
 # ── file uploader ─────────────────────────────────────────────────────────────
 st.subheader("1. Upload File")
 uploaded = st.file_uploader(
-    "Pilih file koordinat / peta",
+    "Pilih file koordinat TM3",
     type=["zip", "dxf", "dwg", "pdf", "csv"],
     accept_multiple_files=False,
-    help=(
-        "Shapefile: ZIP berisi .shp + .dbf + .shx (+ .prj). "
-        "DXF/DWG: export dari AutoCAD ke .dxf terlebih dahulu."
-    ),
+    help="Shapefile: ZIP berisi .shp + .dbf + .shx (+ .prj).",
 )
 
-# ── process ───────────────────────────────────────────────────────────────────
+# ── baca file ─────────────────────────────────────────────────────────────────
 gdf = None
 
 if uploaded:
@@ -73,48 +70,42 @@ if uploaded:
 
         try:
             if ext == ".zip":
-                # ZIP Shapefile
                 gdf = read_shp(tmp_path)
                 src_format = "ZIP Shapefile"
-
             elif ext in (".dxf", ".dwg"):
                 gdf = read_dwg(tmp_path)
                 src_format = "DWG/DXF"
-
             elif ext == ".pdf":
                 gdf = read_pdf(tmp_path)
                 src_format = "PDF (tabel koordinat)"
-
             elif ext == ".csv":
                 gdf = read_shp(tmp_path, is_csv=True)
                 src_format = "CSV"
-
             else:
-                st.warning("Format file tidak dikenali. Mohon upload ZIP, DXF, PDF, atau CSV.")
-
+                st.warning("Format tidak dikenali. Upload ZIP, DXF, PDF, atau CSV.")
         except Exception as e:
             st.error(f"❌ Gagal membaca file: {e}")
             gdf = None
 
     if gdf is not None:
-        st.success(f"✅ File berhasil dibaca sebagai **{src_format}** — {len(gdf)} fitur ditemukan.")
+        st.success(f"✅ File dibaca sebagai **{src_format}** — {len(gdf)} fitur ditemukan.")
 
-# ── proses reproyeksi ─────────────────────────────────────────────────────────
+# ── konversi ──────────────────────────────────────────────────────────────────
 if gdf is not None:
-    st.subheader("2. Reproyeksi ke TM3")
+    st.subheader("2. Konversi ke UTM WGS84")
     if st.button("🔄 Proses Konversi", type="primary"):
-        with st.spinner("Memproyeksikan koordinat ke TM3…"):
+        with st.spinner("Mengkonversi koordinat TM3 → UTM…"):
             try:
-                gdf_tm3 = reproject_to_tm3(gdf, tm3_zone)
-                st.session_state["gdf_tm3"] = gdf_tm3
-                st.session_state["gdf_wgs"] = gdf_tm3.to_crs(epsg=4326)
-                st.success(f"✅ Reproyeksi selesai — CRS: `{gdf_tm3.crs}`")
+                gdf_utm = reproject_to_utm(gdf, tm3_zone)
+                st.session_state["gdf_utm"] = gdf_utm
+                st.session_state["gdf_wgs"] = gdf_utm.to_crs(epsg=4326)
+                st.success(f"✅ Konversi selesai — CRS: `{gdf_utm.crs}`")
             except Exception as e:
-                st.error(f"❌ Gagal reproyeksi: {e}")
+                st.error(f"❌ Gagal konversi: {e}")
 
 # ── tampilkan hasil ───────────────────────────────────────────────────────────
-if "gdf_tm3" in st.session_state:
-    gdf_tm3: gpd.GeoDataFrame = st.session_state["gdf_tm3"]
+if "gdf_utm" in st.session_state:
+    gdf_utm: gpd.GeoDataFrame = st.session_state["gdf_utm"]
     gdf_wgs: gpd.GeoDataFrame = st.session_state["gdf_wgs"]
 
     st.divider()
@@ -122,14 +113,12 @@ if "gdf_tm3" in st.session_state:
 
     col1, col2 = st.columns(2)
 
-    # ── tabel atribut + luas ──────────────────────────────────────────────────
     with col1:
         st.markdown("**Tabel Atribut & Luas**")
-
-        df_display = gdf_tm3.drop(columns="geometry", errors="ignore").copy()
-        if gdf_tm3.geom_type.isin(["Polygon", "MultiPolygon"]).any():
-            df_display["Luas_m2"] = gdf_tm3.geometry.area.round(2)
-            df_display["Luas_Ha"]  = (gdf_tm3.geometry.area / 10_000).round(4)
+        df_display = gdf_utm.drop(columns="geometry", errors="ignore").copy()
+        if gdf_utm.geom_type.isin(["Polygon", "MultiPolygon"]).any():
+            df_display["Luas_m2"] = gdf_utm.geometry.area.round(2)
+            df_display["Luas_Ha"] = (gdf_utm.geometry.area / 10_000).round(4)
 
         st.dataframe(df_display, use_container_width=True)
 
@@ -137,7 +126,6 @@ if "gdf_tm3" in st.session_state:
         if total_ha:
             st.metric("Total Luas", f"{total_ha:,.4f} Ha")
 
-    # ── preview peta ─────────────────────────────────────────────────────────
     with col2:
         st.markdown("**Preview Peta (WGS84)**")
         try:
@@ -157,25 +145,24 @@ if "gdf_tm3" in st.session_state:
         except Exception as e:
             st.warning(f"Preview peta tidak tersedia: {e}")
 
-    # ── ekspor ───────────────────────────────────────────────────────────────
     st.divider()
     st.subheader("4. Ekspor Hasil")
     ecol1, ecol2 = st.columns(2)
 
     with ecol1:
-        shp_bytes = export_shp(gdf_tm3)
+        shp_bytes = export_shp(gdf_utm)
         st.download_button(
             "⬇️ Download SHP (ZIP)",
             data=shp_bytes,
-            file_name="hasil_tm3.zip",
+            file_name="hasil_utm.zip",
             mime="application/zip",
         )
 
     with ecol2:
-        csv_bytes = export_csv(gdf_tm3)
+        csv_bytes = export_csv(gdf_utm)
         st.download_button(
             "⬇️ Download CSV Koordinat",
             data=csv_bytes,
-            file_name="koordinat_tm3.csv",
+            file_name="koordinat_utm.csv",
             mime="text/csv",
         )
